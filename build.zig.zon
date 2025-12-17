@@ -36,6 +36,10 @@
             .url = "git+https://github.com/Gota7/zig-sdl3?ref=v0.1.5#014b7bcb2899f3ed9c945c4abfcfe1b25d75bfeb",
             .hash = "sdl3-0.1.5-NmT1QxARJgAH1Wp0cMBJDAc9vD7weufTkIwVa5rehA2q",
         },
+        .zmath = .{
+            .url = "git+https://github.com/zig-gamedev/zmath.git#3a5955b2b72cd081563fbb084eff05bffd1e3fbb",
+            .hash = "zmath-0.11.0-dev-wjwivdMsAwD-xaLj76YHUq3t9JDH-X16xuMTmnDzqbu2",
+        },
     },
     .paths = .{
         "build.zig",

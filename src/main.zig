@@ -1,5 +1,6 @@
 const sdl3 = @import("sdl3");
 const std = @import("std");
+const zm = @import("zmath");
 
 const ScreenWidth = 1383;
 const ScreenHeight = 1377;
@@ -43,48 +44,32 @@ const AppState = struct {
     }
 };
 
-const Engine3D = struct {};
+pub fn projectPoint(vec: zm.Vec, mat: zm.Mat) zm.Vec {
+    const v = zm.mul(vec, mat);
+    const w = if (v[3] == 0) 1 else v[3];
+    return v / @as(zm.Vec, @splat(w));
+}
 
-const Vec3 = @Vector(3, f32);
 const Tri = struct {
-    points: [3]Vec3,
+    p: [3]zm.Vec,
     pub fn init(p: [9]f32) Tri {
-        return .{
-            .points = .{
-                .{ p[0], p[1], p[2] },
-                .{ p[3], p[4], p[5] },
-                .{ p[6], p[7], p[8] },
+        return Tri{
+            .p = .{
+                .{ p[0], p[1], p[2], 0 },
+                .{ p[3], p[4], p[5], 0 },
+                .{ p[6], p[7], p[8], 0 },
             },
         };
     }
-
     const Self = @This();
     pub fn draw(self: *const Self, renderer: *const sdl3.render.Renderer) !void {
-        try renderer.renderLine(.{ .x = self.points[0][0], .y = self.points[0][1] }, .{ .x = self.points[1][0], .y = self.points[1][1] });
-        try renderer.renderLine(.{ .x = self.points[1][0], .y = self.points[1][1] }, .{ .x = self.points[2][0], .y = self.points[2][1] });
-        try renderer.renderLine(.{ .x = self.points[2][0], .y = self.points[2][1] }, .{ .x = self.points[0][0], .y = self.points[0][1] });
+        try renderer.renderLine(.{ .x = self.p[0][0], .y = self.p[0][1] }, .{ .x = self.p[1][0], .y = self.p[1][1] });
+        try renderer.renderLine(.{ .x = self.p[1][0], .y = self.p[1][1] }, .{ .x = self.p[2][0], .y = self.p[2][1] });
+        try renderer.renderLine(.{ .x = self.p[2][0], .y = self.p[2][1] }, .{ .x = self.p[0][0], .y = self.p[0][1] });
     }
 
     pub fn copy(self: Self) Self {
         return self;
-    }
-};
-
-const Mat4 = struct {
-    m: [4][4]f32 = .{.{0} ** 4} ** 4,
-
-    const Self = @This();
-
-    pub fn multiplyVec(self: *const Self, vec: Vec3) Vec3 {
-        var w = vec[0] * self.m[0][3] + vec[1] * self.m[1][3] + vec[2] * self.m[2][3] + self.m[3][3];
-
-        if (w == 0) w = 1;
-
-        return .{
-            (vec[0] * self.m[0][0] + vec[1] * self.m[1][0] + vec[2] * self.m[2][0] + self.m[3][0]) / w,
-            (vec[0] * self.m[0][1] + vec[1] * self.m[1][1] + vec[2] * self.m[2][1] + self.m[3][1]) / w,
-            (vec[0] * self.m[0][2] + vec[1] * self.m[1][2] + vec[2] * self.m[2][2] + self.m[3][2]) / w,
-        };
     }
 };
 
@@ -98,18 +83,18 @@ pub fn main() !void {
 
     const meshCube = Mesh{
         .tris = &[_]Tri{
-            Tri.init(.{ 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0 }),
-            Tri.init(.{ 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0 }),
-            Tri.init(.{ 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0 }),
-            Tri.init(.{ 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0 }),
-            Tri.init(.{ 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0 }),
-            Tri.init(.{ 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0 }),
-            Tri.init(.{ 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0 }),
-            Tri.init(.{ 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0 }),
-            Tri.init(.{ 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0 }),
-            Tri.init(.{ 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0 }),
-            Tri.init(.{ 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0 }),
-            Tri.init(.{ 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0 }),
+            Tri.init(.{ 0, 0, 0, 0, -1, 0, -1, -1, 0 }),
+            Tri.init(.{ 0, 0, 0, -1, -1, 0, -1, 0, 0 }),
+            Tri.init(.{ -1, 0, 0, -1, -1, 0, -1, -1, -1 }),
+            Tri.init(.{ -1, 0, 0, -1, -1, -1, -1, 0, -1 }),
+            Tri.init(.{ -1, 0, -1, -1, -1, -1, 0, -1, -1 }),
+            Tri.init(.{ -1, 0, -1, 0, -1, -1, 0, 0, -1 }),
+            Tri.init(.{ 0, 0, -1, 0, -1, -1, 0, -1, 0 }),
+            Tri.init(.{ 0, 0, -1, 0, -1, 0, 0, 0, 0 }),
+            Tri.init(.{ 0, -1, 0, 0, -1, -1, -1, -1, -1 }),
+            Tri.init(.{ 0, -1, 0, -1, -1, -1, -1, -1, 0 }),
+            Tri.init(.{ -1, 0, -1, 0, 0, -1, 0, 0, 0 }),
+            Tri.init(.{ -1, 0, -1, 0, 0, 0, -1, 0, 0 }),
         },
     };
 
@@ -119,14 +104,14 @@ pub fn main() !void {
     const aspectRatio: f32 = @as(f32, @floatFromInt(state.height)) / @as(f32, @floatFromInt(state.width));
     const fieldOfViewRad = 1.0 / std.math.tan(fieldOfView * 0.5 / 180.0 * std.math.pi);
 
-    var projectMatrix = Mat4{};
+    var projectMatrix2: zm.Mat = .{.{0} ** 4} ** 4;
 
-    projectMatrix.m[0][0] = aspectRatio * fieldOfViewRad;
-    projectMatrix.m[1][1] = fieldOfViewRad;
-    projectMatrix.m[2][2] = farDist / (farDist - nearDist);
-    projectMatrix.m[3][2] = (-farDist * nearDist) / (farDist - nearDist);
-    projectMatrix.m[2][3] = 1.0;
-    projectMatrix.m[3][3] = 0.0;
+    projectMatrix2[0][0] = aspectRatio * fieldOfViewRad;
+    projectMatrix2[1][1] = fieldOfViewRad;
+    projectMatrix2[2][2] = farDist / (farDist - nearDist);
+    projectMatrix2[3][2] = (-farDist * nearDist) / (farDist - nearDist);
+    projectMatrix2[2][3] = 1.0;
+    projectMatrix2[3][3] = 0.0;
 
     var lastTick = sdl3.timer.getNanosecondsSinceInit();
     var curTick = sdl3.timer.getMillisecondsSinceInit();
@@ -162,71 +147,70 @@ pub fn main() !void {
 
         fTheta += dt;
 
-        var rotZMat = Mat4{};
-        var rotXMat = Mat4{};
+        var rotZMat: zm.Mat = .{.{0} ** 4} ** 4;
+        var rotXMat: zm.Mat = .{.{0} ** 4} ** 4;
 
-        rotZMat.m[0][0] = std.math.cos(dt);
-
-        rotZMat.m[0][0] = std.math.cos(fTheta);
-        rotZMat.m[0][1] = std.math.sin(fTheta);
-        rotZMat.m[1][0] = -std.math.sin(fTheta);
-        rotZMat.m[1][1] = std.math.cos(fTheta);
-        rotZMat.m[2][2] = 1;
-        rotZMat.m[3][3] = 1;
+        rotZMat[0][0] = std.math.cos(fTheta);
+        rotZMat[0][1] = std.math.sin(fTheta);
+        rotZMat[1][0] = -std.math.sin(fTheta);
+        rotZMat[1][1] = std.math.cos(fTheta);
+        rotZMat[2][2] = 1;
+        rotZMat[3][3] = 1;
 
         // Rotation X
-        rotXMat.m[0][0] = 1;
-        rotXMat.m[1][1] = std.math.cos(fTheta * 0.5);
-        rotXMat.m[1][2] = std.math.sin(fTheta * 0.5);
-        rotXMat.m[2][1] = -std.math.sin(fTheta * 0.5);
-        rotXMat.m[2][2] = std.math.cos(fTheta * 0.5);
-        rotXMat.m[3][3] = 1;
+        rotXMat[0][0] = 1;
+        rotXMat[1][1] = std.math.cos(fTheta * 0.5);
+        rotXMat[1][2] = std.math.sin(fTheta * 0.5);
+        rotXMat[2][1] = -std.math.sin(fTheta * 0.5);
+        rotXMat[2][2] = std.math.cos(fTheta * 0.5);
+        rotXMat[3][3] = 1;
 
         try state.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
         try state.renderer.clear();
 
         try state.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 });
+
         for (meshCube.tris) |tri| {
             const triRotZ = Tri{
-                .points = .{
-                    rotZMat.multiplyVec(tri.points[0]),
-                    rotZMat.multiplyVec(tri.points[1]),
-                    rotZMat.multiplyVec(tri.points[2]),
+                .p = .{
+                    zm.mul(tri.p[0], rotZMat),
+                    zm.mul(tri.p[1], rotZMat),
+                    zm.mul(tri.p[2], rotZMat),
                 },
             };
 
             const triRotZX = Tri{
-                .points = .{
-                    rotXMat.multiplyVec(triRotZ.points[0]),
-                    rotXMat.multiplyVec(triRotZ.points[1]),
-                    rotXMat.multiplyVec(triRotZ.points[2]),
+                .p = .{
+                    zm.mul((triRotZ.p[0]), rotXMat),
+                    zm.mul((triRotZ.p[1]), rotXMat),
+                    zm.mul((triRotZ.p[2]), rotXMat),
                 },
             };
             var translatedTri = triRotZX.copy();
-            translatedTri.points[0][2] += 3;
-            translatedTri.points[1][2] += 3;
-            translatedTri.points[2][2] += 3;
+            translatedTri.p[0][2] += 3;
+            translatedTri.p[1][2] += 3;
+            translatedTri.p[2][2] += 3;
             var projectedTri = Tri{
-                .points = .{
-                    projectMatrix.multiplyVec(translatedTri.points[0]),
-                    projectMatrix.multiplyVec(translatedTri.points[1]),
-                    projectMatrix.multiplyVec(translatedTri.points[2]),
+                .p = .{
+                    projectPoint((translatedTri.p[0]), projectMatrix2),
+                    projectPoint((translatedTri.p[1]), projectMatrix2),
+                    projectPoint((translatedTri.p[2]), projectMatrix2),
                 },
             };
 
-            projectedTri.points[0][0] += 1;
-            projectedTri.points[0][1] += 1;
-            projectedTri.points[1][0] += 1;
-            projectedTri.points[1][1] += 1;
-            projectedTri.points[2][0] += 1;
-            projectedTri.points[2][1] += 1;
+            projectedTri.p[0][0] += 1;
+            projectedTri.p[0][1] += 1;
+            projectedTri.p[1][0] += 1;
+            projectedTri.p[1][1] += 1;
+            projectedTri.p[2][0] += 1;
+            projectedTri.p[2][1] += 1;
 
-            projectedTri.points[0][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
-            projectedTri.points[0][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
-            projectedTri.points[1][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
-            projectedTri.points[1][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
-            projectedTri.points[2][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
-            projectedTri.points[2][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
+            projectedTri.p[0][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
+            projectedTri.p[0][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
+            projectedTri.p[1][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
+            projectedTri.p[1][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
+            projectedTri.p[2][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
+            projectedTri.p[2][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
 
             try projectedTri.draw(&state.renderer);
         }

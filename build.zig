@@ -49,6 +49,8 @@ pub fn build(b: *std.Build) void {
         // .image_enable_xpm = true,
         // .image_enable_xv = true,
     });
+    const zmath = b.dependency("zmath", .{});
+    exe.root_module.addImport("zmath", zmath.module("root"));
 
     exe.root_module.addImport("sdl3", sdl3.module("sdl3"));
 
