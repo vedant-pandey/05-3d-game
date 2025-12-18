@@ -109,6 +109,16 @@ const Tri = struct {
         return self.normal;
     }
 
+    pub fn project(self: *Self, projectionMatrix:zm.Mat) Tri {
+        return Tri{
+            .p = .{
+                projectPoint((self.p[0]), projectionMatrix),
+                projectPoint((self.p[1]), projectionMatrix),
+                projectPoint((self.p[2]), projectionMatrix),
+            },
+        };
+    }
+
     pub fn copy(self: Self) Self {
         return self;
     }
@@ -253,7 +263,6 @@ pub fn main() !void {
         try state.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 });
 
         var trisToRaster = try std.ArrayList(Tri).initCapacity(allocator, 1000);
-        _ = &trisToRaster;
 
         // Illumination
         const light = zm.normalize3(zm.Vec{ 0, 0, -1, 0 });
@@ -288,14 +297,7 @@ pub fn main() !void {
 
             if (zm.dot3(normal, translatedTri.p[0] - vCamera)[0] > 0) continue;
 
-            // Project triangle 3D -> 2D
-            var projectedTri = Tri{
-                .p = .{
-                    projectPoint((translatedTri.p[0]), projectMatrix2),
-                    projectPoint((translatedTri.p[1]), projectMatrix2),
-                    projectPoint((translatedTri.p[2]), projectMatrix2),
-                },
-            };
+            var projectedTri = translatedTri.project(projectMatrix2);
 
             projectedTri.p[0][0] += 1;
             projectedTri.p[0][1] += 1;
