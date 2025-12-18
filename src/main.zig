@@ -52,6 +52,8 @@ pub fn projectPoint(vec: zm.Vec, mat: zm.Mat) zm.Vec {
 
 const Tri = struct {
     p: [3]zm.Vec,
+    normal: zm.Vec = .{ 0, 0, 0, 1 },
+
     pub fn init(p: [9]f32) Tri {
         return Tri{
             .p = .{
@@ -61,6 +63,7 @@ const Tri = struct {
             },
         };
     }
+
     const Self = @This();
     pub fn drawWireframe(self: *const Self, renderer: *const sdl3.render.Renderer, color: sdl3.pixels.Color) !void {
         try renderer.setDrawColor(color);
@@ -88,36 +91,93 @@ const Tri = struct {
         try renderer.renderGeometry(null, &.{ v1, v2, v3 }, null);
     }
 
+    pub fn buildNormalAndGet(self: *Self) zm.Vec {
+        const line1: zm.Vec = .{
+            self.p[1][0] - self.p[0][0],
+            self.p[1][1] - self.p[0][1],
+            self.p[1][2] - self.p[0][2],
+            0,
+        };
+        const line2: zm.Vec = .{
+            self.p[2][0] - self.p[0][0],
+            self.p[2][1] - self.p[0][1],
+            self.p[2][2] - self.p[0][2],
+            0,
+        };
+        self.normal = zm.normalize3(zm.cross3(line1, line2));
+
+        return self.normal;
+    }
+
     pub fn copy(self: Self) Self {
         return self;
     }
 };
 
 const Mesh = struct {
-    tris: []const Tri = undefined,
+    tris: std.ArrayList(Tri),
+
+    pub fn loadFromObjFile(filepath: [:0]const u8, allocator: std.mem.Allocator) !Mesh {
+        const file = try std.fs.cwd().openFile(filepath, .{});
+        defer file.close();
+        var buffer: [128]u8 = .{0} ** 128;
+        var reader = file.reader(buffer[0..]);
+        var verts = try std.ArrayList(zm.Vec).initCapacity(allocator, 1000);
+        var faces = try std.ArrayList(Tri).initCapacity(allocator, 1000);
+
+        while (reader.interface.takeDelimiterInclusive('\n')) |line| {
+            const trimmed = std.mem.trim(u8, line, " \r\n");
+            if (trimmed.len == 0 or trimmed[0] == '#') continue;
+            if (trimmed[0] == 'v') {
+                var it = std.mem.tokenizeScalar(u8, trimmed[2..], ' ');
+                try verts.append(allocator, zm.Vec{
+                    try std.fmt.parseFloat(f32, it.next().?),
+                    try std.fmt.parseFloat(f32, it.next().?),
+                    try std.fmt.parseFloat(f32, it.next().?),
+                    1,
+                });
+            } else if (trimmed[0] == 'f') {
+                var it = std.mem.tokenizeScalar(u8, trimmed[2..], ' ');
+                try faces.append(allocator, .{ .p = .{
+                    verts.items[try std.fmt.parseInt(usize, it.next().?, 0) - 1],
+                    verts.items[try std.fmt.parseInt(usize, it.next().?, 0) - 1],
+                    verts.items[try std.fmt.parseInt(usize, it.next().?, 0) - 1],
+                } });
+            }
+        } else |_| {}
+
+        return Mesh{ .tris = faces };
+    }
+
+    pub fn cubeMesh(allocator: std.mem.Allocator) !Mesh {
+        var meshCube = Mesh{
+            .tris = try std.ArrayList(Tri).initCapacity(allocator, 1000),
+        };
+
+        try meshCube.tris.append(allocator, Tri.init(.{ 0, 0, 0, 0, 1, 0, 1, 1, 0 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 0, 0, 0, 1, 1, 0, 1, 0, 0 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 1, 0, 0, 1, 1, 0, 1, 1, 1 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 1, 0, 0, 1, 1, 1, 1, 0, 1 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 1, 0, 1, 1, 1, 1, 0, 1, 1 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 1, 0, 1, 0, 1, 1, 0, 0, 1 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 0, 0, 1, 0, 1, 1, 0, 1, 0 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 0, 0, 1, 0, 1, 0, 0, 0, 0 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 0, 1, 0, 0, 1, 1, 1, 1, 1 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 0, 1, 0, 1, 1, 1, 1, 1, 0 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 1, 0, 1, 0, 0, 1, 0, 0, 0 }));
+        try meshCube.tris.append(allocator, Tri.init(.{ 1, 0, 1, 0, 0, 0, 1, 0, 0 }));
+    }
 };
 
 pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     var state = try AppState.init(.{ .video = true }, ScreenWidth, ScreenHeight);
     defer state.deinit();
 
-    const meshCube = Mesh{
-        .tris = &[_]Tri{
-            Tri.init(.{ 0, 0, 0, 0, 1, 0, 1, 1, 0 }),
-            Tri.init(.{ 0, 0, 0, 1, 1, 0, 1, 0, 0 }),
-            Tri.init(.{ 1, 0, 0, 1, 1, 0, 1, 1, 1 }),
-            Tri.init(.{ 1, 0, 0, 1, 1, 1, 1, 0, 1 }),
-            Tri.init(.{ 1, 0, 1, 1, 1, 1, 0, 1, 1 }),
-            Tri.init(.{ 1, 0, 1, 0, 1, 1, 0, 0, 1 }),
-            Tri.init(.{ 0, 0, 1, 0, 1, 1, 0, 1, 0 }),
-            Tri.init(.{ 0, 0, 1, 0, 1, 0, 0, 0, 0 }),
-            Tri.init(.{ 0, 1, 0, 0, 1, 1, 1, 1, 1 }),
-            Tri.init(.{ 0, 1, 0, 1, 1, 1, 1, 1, 0 }),
-            Tri.init(.{ 1, 0, 1, 0, 0, 1, 0, 0, 0 }),
-            Tri.init(.{ 1, 0, 1, 0, 0, 0, 1, 0, 0 }),
-        },
-    };
-
+    const meshCube = try Mesh.loadFromObjFile("./objs/VideoShip.obj", allocator);
     const vCamera = zm.Vec{ 0, 0, 0, 0 };
 
     const nearDist = 0.1;
@@ -192,7 +252,13 @@ pub fn main() !void {
 
         try state.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 });
 
-        for (meshCube.tris) |tri| {
+        var trisToRaster = try std.ArrayList(Tri).initCapacity(allocator, 1000);
+        _ = &trisToRaster;
+
+        // Illumination
+        const light = zm.normalize3(zm.Vec{ 0, 0, -1, 0 });
+
+        for (meshCube.tris.items) |tri| {
             // Rotate in Z axis
             const triRotZ = Tri{
                 .p = .{
@@ -213,30 +279,14 @@ pub fn main() !void {
 
             // Offset into the screen
             var translatedTri = triRotZX.copy();
-            translatedTri.p[0][2] += 3;
-            translatedTri.p[1][2] += 3;
-            translatedTri.p[2][2] += 3;
+            translatedTri.p[0][2] += 8;
+            translatedTri.p[1][2] += 8;
+            translatedTri.p[2][2] += 8;
 
             // Culling
-            const line1: zm.Vec = .{
-                translatedTri.p[1][0] - translatedTri.p[0][0],
-                translatedTri.p[1][1] - translatedTri.p[0][1],
-                translatedTri.p[1][2] - translatedTri.p[0][2],
-                0,
-            };
-            const line2: zm.Vec = .{
-                translatedTri.p[2][0] - translatedTri.p[0][0],
-                translatedTri.p[2][1] - translatedTri.p[0][1],
-                translatedTri.p[2][2] - translatedTri.p[0][2],
-                0,
-            };
-            var normal: zm.Vec = zm.cross3(line1, line2);
-            normal = zm.normalize3(normal);
+            const normal = translatedTri.buildNormalAndGet();
 
             if (zm.dot3(normal, translatedTri.p[0] - vCamera)[0] > 0) continue;
-
-            // Illumination
-            const light = zm.normalize3(zm.Vec{ 0, 0, -1, 0 });
 
             // Project triangle 3D -> 2D
             var projectedTri = Tri{
@@ -261,10 +311,17 @@ pub fn main() !void {
             projectedTri.p[2][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
             projectedTri.p[2][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
 
-            // Use dot product with normal to evaluate light intensity
-            const intensity = zm.dot3(normal, light)[0];
+            projectedTri.normal = normal;
+            try trisToRaster.append(allocator, projectedTri);
+        }
+        std.mem.sort(Tri, trisToRaster.items, {}, triLessThan);
 
-            try projectedTri.drawFill(&state.renderer, .{
+        for (trisToRaster.items) |*tri| {
+
+            // Use dot product with normal to evaluate light intensity
+            const intensity = zm.dot3(tri.normal, light)[0];
+
+            try tri.drawFill(&state.renderer, .{
                 .r = 1 * intensity,
                 .g = 1 * intensity,
                 .b = 1 * intensity,
@@ -272,7 +329,7 @@ pub fn main() !void {
             });
 
             // Draw Wireframe
-            try projectedTri.drawWireframe(&state.renderer, .{
+            try tri.drawWireframe(&state.renderer, .{
                 .r = 0,
                 .g = 0,
                 .b = 0,
@@ -282,4 +339,10 @@ pub fn main() !void {
 
         try state.renderer.present();
     }
+}
+
+pub fn triLessThan(_: void, a: Tri, b: Tri) bool {
+    const z1 = (a.p[0][2] + a.p[1][2] + a.p[2][2]) / 3;
+    const z2 = (b.p[0][2] + b.p[1][2] + b.p[2][2]) / 3;
+    return z1 > z2;
 }
