@@ -62,10 +62,30 @@ const Tri = struct {
         };
     }
     const Self = @This();
-    pub fn draw(self: *const Self, renderer: *const sdl3.render.Renderer) !void {
+    pub fn drawWireframe(self: *const Self, renderer: *const sdl3.render.Renderer, color: sdl3.pixels.Color) !void {
+        try renderer.setDrawColor(color);
         try renderer.renderLine(.{ .x = self.p[0][0], .y = self.p[0][1] }, .{ .x = self.p[1][0], .y = self.p[1][1] });
         try renderer.renderLine(.{ .x = self.p[1][0], .y = self.p[1][1] }, .{ .x = self.p[2][0], .y = self.p[2][1] });
         try renderer.renderLine(.{ .x = self.p[2][0], .y = self.p[2][1] }, .{ .x = self.p[0][0], .y = self.p[0][1] });
+    }
+
+    pub fn drawFill(self: *const Self, renderer: *const sdl3.render.Renderer, color: sdl3.pixels.FColor) !void {
+        const v1 = sdl3.render.Vertex{
+            .position = .{ .x = self.p[0][0], .y = self.p[0][1] },
+            .color = color,
+            .tex_coord = .{ .x = 0, .y = 0 },
+        };
+        const v2 = sdl3.render.Vertex{
+            .position = .{ .x = self.p[1][0], .y = self.p[1][1] },
+            .color = color,
+            .tex_coord = .{ .x = 0, .y = 0 },
+        };
+        const v3 = sdl3.render.Vertex{
+            .position = .{ .x = self.p[2][0], .y = self.p[2][1] },
+            .color = color,
+            .tex_coord = .{ .x = 0, .y = 0 },
+        };
+        try renderer.renderGeometry(null, &.{ v1, v2, v3 }, null);
     }
 
     pub fn copy(self: Self) Self {
@@ -83,20 +103,22 @@ pub fn main() !void {
 
     const meshCube = Mesh{
         .tris = &[_]Tri{
-            Tri.init(.{ 0, 0, 0, 0, -1, 0, -1, -1, 0 }),
-            Tri.init(.{ 0, 0, 0, -1, -1, 0, -1, 0, 0 }),
-            Tri.init(.{ -1, 0, 0, -1, -1, 0, -1, -1, -1 }),
-            Tri.init(.{ -1, 0, 0, -1, -1, -1, -1, 0, -1 }),
-            Tri.init(.{ -1, 0, -1, -1, -1, -1, 0, -1, -1 }),
-            Tri.init(.{ -1, 0, -1, 0, -1, -1, 0, 0, -1 }),
-            Tri.init(.{ 0, 0, -1, 0, -1, -1, 0, -1, 0 }),
-            Tri.init(.{ 0, 0, -1, 0, -1, 0, 0, 0, 0 }),
-            Tri.init(.{ 0, -1, 0, 0, -1, -1, -1, -1, -1 }),
-            Tri.init(.{ 0, -1, 0, -1, -1, -1, -1, -1, 0 }),
-            Tri.init(.{ -1, 0, -1, 0, 0, -1, 0, 0, 0 }),
-            Tri.init(.{ -1, 0, -1, 0, 0, 0, -1, 0, 0 }),
+            Tri.init(.{ 0, 0, 0, 0, 1, 0, 1, 1, 0 }),
+            Tri.init(.{ 0, 0, 0, 1, 1, 0, 1, 0, 0 }),
+            Tri.init(.{ 1, 0, 0, 1, 1, 0, 1, 1, 1 }),
+            Tri.init(.{ 1, 0, 0, 1, 1, 1, 1, 0, 1 }),
+            Tri.init(.{ 1, 0, 1, 1, 1, 1, 0, 1, 1 }),
+            Tri.init(.{ 1, 0, 1, 0, 1, 1, 0, 0, 1 }),
+            Tri.init(.{ 0, 0, 1, 0, 1, 1, 0, 1, 0 }),
+            Tri.init(.{ 0, 0, 1, 0, 1, 0, 0, 0, 0 }),
+            Tri.init(.{ 0, 1, 0, 0, 1, 1, 1, 1, 1 }),
+            Tri.init(.{ 0, 1, 0, 1, 1, 1, 1, 1, 0 }),
+            Tri.init(.{ 1, 0, 1, 0, 0, 1, 0, 0, 0 }),
+            Tri.init(.{ 1, 0, 1, 0, 0, 0, 1, 0, 0 }),
         },
     };
+
+    const vCamera = zm.Vec{ 0, 0, 0, 0 };
 
     const nearDist = 0.1;
     const farDist = 1000.0;
@@ -171,6 +193,7 @@ pub fn main() !void {
         try state.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 });
 
         for (meshCube.tris) |tri| {
+            // Rotate in Z axis
             const triRotZ = Tri{
                 .p = .{
                     zm.mul(tri.p[0], rotZMat),
@@ -179,6 +202,7 @@ pub fn main() !void {
                 },
             };
 
+            // Rotate in X axis
             const triRotZX = Tri{
                 .p = .{
                     zm.mul((triRotZ.p[0]), rotXMat),
@@ -186,10 +210,35 @@ pub fn main() !void {
                     zm.mul((triRotZ.p[2]), rotXMat),
                 },
             };
+
+            // Offset into the screen
             var translatedTri = triRotZX.copy();
             translatedTri.p[0][2] += 3;
             translatedTri.p[1][2] += 3;
             translatedTri.p[2][2] += 3;
+
+            // Culling
+            const line1: zm.Vec = .{
+                translatedTri.p[1][0] - translatedTri.p[0][0],
+                translatedTri.p[1][1] - translatedTri.p[0][1],
+                translatedTri.p[1][2] - translatedTri.p[0][2],
+                0,
+            };
+            const line2: zm.Vec = .{
+                translatedTri.p[2][0] - translatedTri.p[0][0],
+                translatedTri.p[2][1] - translatedTri.p[0][1],
+                translatedTri.p[2][2] - translatedTri.p[0][2],
+                0,
+            };
+            var normal: zm.Vec = zm.cross3(line1, line2);
+            normal = zm.normalize3(normal);
+
+            if (zm.dot3(normal, translatedTri.p[0] - vCamera)[0] > 0) continue;
+
+            // Illumination
+            const light = zm.normalize3(zm.Vec{ 0, 0, -1, 0 });
+
+            // Project triangle 3D -> 2D
             var projectedTri = Tri{
                 .p = .{
                     projectPoint((translatedTri.p[0]), projectMatrix2),
@@ -212,7 +261,23 @@ pub fn main() !void {
             projectedTri.p[2][0] *= 0.5 * @as(f32, @floatFromInt(state.width));
             projectedTri.p[2][1] *= 0.5 * @as(f32, @floatFromInt(state.height));
 
-            try projectedTri.draw(&state.renderer);
+            // Use dot product with normal to evaluate light intensity
+            const intensity = zm.dot3(normal, light)[0];
+
+            try projectedTri.drawFill(&state.renderer, .{
+                .r = 1 * intensity,
+                .g = 1 * intensity,
+                .b = 1 * intensity,
+                .a = 1,
+            });
+
+            // Draw Wireframe
+            try projectedTri.drawWireframe(&state.renderer, .{
+                .r = 0,
+                .g = 0,
+                .b = 0,
+                .a = 255,
+            });
         }
 
         try state.renderer.present();
