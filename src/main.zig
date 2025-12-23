@@ -540,14 +540,13 @@ pub fn main() !void {
         std.mem.sort(Tri, trisToRaster.items, {}, Tri.lessThan);
 
         for (trisToRaster.items) |tri| {
-            var intensity = ambientLight;
-
             trisOnScreen.clearRetainingCapacity();
             try trisOnScreen.append(allocator, tri);
 
             try clipTriToScreen(&state, allocator, &iterativeClipList, &trisOnScreen);
 
             for (trisOnScreen.items) |tri2| {
+                var intensity = ambientLight;
                 for (lights.items) |worldLight| {
                     const light = zm.normalize3(zm.mul(worldLight, viewMat));
                     const lightIntensity = zm.dot3(tri2.normal, light)[0];
