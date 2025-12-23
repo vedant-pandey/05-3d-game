@@ -27,6 +27,7 @@ const AppState = struct {
         });
         window.raise() catch unreachable;
         try window.setPosition(.{ .absolute = 0 }, .{ .absolute = 0 });
+        try sdl3.mouse.setWindowRelativeMode(window, true);
 
         const renderer = try sdl3.render.Renderer.init(window, null);
 
@@ -132,6 +133,7 @@ const Tri = struct {
                 projectPoint((self.p[1]), projectionMatrix.*),
                 projectPoint((self.p[2]), projectionMatrix.*),
             },
+            .normal = self.normal,
         };
     }
 
@@ -142,52 +144,40 @@ const Tri = struct {
                 zm.mul(self.p[1], rotationMatrix.*),
                 zm.mul(self.p[2], rotationMatrix.*),
             },
+            .normal = self.normal,
         };
     }
 
-    pub fn translate(self: *const Self, x: f32, y: f32, z: f32) Tri {
-        var translatedTri = self.copy();
-
-        translatedTri.p[0][0] += x;
-        translatedTri.p[1][0] += x;
-        translatedTri.p[2][0] += x;
-        translatedTri.p[0][1] += y;
-        translatedTri.p[1][1] += y;
-        translatedTri.p[2][1] += y;
-        translatedTri.p[0][2] += z;
-        translatedTri.p[1][2] += z;
-        translatedTri.p[2][2] += z;
-
-        return translatedTri;
+    pub fn translate(self: *const Self, offset: zm.Vec) Self {
+        return Tri{
+            .p = .{
+                self.p[0] + offset,
+                self.p[1] + offset,
+                self.p[2] + offset,
+            },
+            .normal = self.normal,
+        };
     }
 
-    pub fn scale(self: *const Self, x: f32, y: f32, z: f32) Tri {
-        var tri = self.copy();
-
-        tri.p[0][0] *= x;
-        tri.p[1][0] *= x;
-        tri.p[2][0] *= x;
-        tri.p[0][1] *= y;
-        tri.p[1][1] *= y;
-        tri.p[2][1] *= y;
-        tri.p[0][2] *= z;
-        tri.p[1][2] *= z;
-        tri.p[2][2] *= z;
-
-        return tri;
-    }
-
-    pub fn copy(self: Self) Self {
-        return self;
+    pub fn scale(self: *const Self, factor: zm.Vec) Self {
+        return Tri{
+            .p = .{
+                self.p[0] * factor,
+                self.p[1] * factor,
+                self.p[2] * factor,
+            },
+            .normal = self.normal,
+        };
     }
 };
 
 const Mesh = struct {
     tris: std.ArrayList(Tri),
+    pos: zm.Vec,
 
     const Self = @This();
 
-    pub fn loadFromObjFile(filepath: [:0]const u8, allocator: std.mem.Allocator) !Self {
+    pub fn loadFromObjFile(filepath: [:0]const u8, allocator: std.mem.Allocator, pos: zm.Vec) !Self {
         const file = try std.fs.cwd().openFile(filepath, .{});
         defer file.close();
         var buffer: [128]u8 = .{0} ** 128;
@@ -218,7 +208,7 @@ const Mesh = struct {
             }
         } else |_| {}
 
-        return Mesh{ .tris = faces };
+        return Mesh{ .tris = faces, .pos = pos };
     }
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
@@ -265,89 +255,59 @@ const Camera = struct {
 };
 
 pub fn getXRotationMatrix(theta: f32) zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
-
-    mat[0][0] = 1;
-    mat[1][1] = std.math.cos(theta);
-    mat[1][2] = std.math.sin(theta);
-    mat[2][1] = -std.math.sin(theta);
-    mat[2][2] = std.math.cos(theta);
-    mat[3][3] = 1.0;
-
-    return mat;
+    return zm.Mat{
+        .{ 1, 0, 0, 0 },
+        .{ 0, @cos(theta), -@sin(theta), 0 },
+        .{ 0, @sin(theta), @cos(theta), 0 },
+        .{ 0, 0, 0, 1 },
+    };
 }
 
 pub fn getYRotationMatrix(theta: f32) zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
-
-    mat[0][0] = std.math.cos(theta);
-    mat[0][2] = std.math.sin(theta);
-    mat[2][0] = -std.math.sin(theta);
-    mat[1][1] = 1.0;
-    mat[2][2] = std.math.cos(theta);
-    mat[3][3] = 1.0;
-    return mat;
+    return zm.Mat{
+        .{ @cos(theta), 0, @sin(theta), 0 },
+        .{ 0, 1, 0, 0 },
+        .{ -@sin(theta), @cos(theta), 0, 0 },
+        .{ 0, 0, 0, 1 },
+    };
 }
 
 pub fn getZRotationMatrix(theta: f32) zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
-
-    mat[0][0] = std.math.cos(theta);
-    mat[0][1] = std.math.sin(theta);
-    mat[1][0] = -std.math.sin(theta);
-    mat[1][1] = std.math.cos(theta);
-    mat[2][2] = 1.0;
-    mat[3][3] = 1.0;
-    return mat;
+    return zm.Mat{
+        .{ @cos(theta), @sin(theta), 0, 0 },
+        .{ -@sin(theta), @cos(theta), 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ 0, 0, 0, 1 },
+    };
 }
 
 pub fn getIdentityMatrix() zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
-
-    mat[0][0] = 1;
-    mat[1][1] = 1;
-    mat[2][2] = 1;
-    mat[3][3] = 1;
-    return mat;
+    return zm.Mat{
+        .{ 1, 0, 0, 0 },
+        .{ 0, 1, 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ 0, 0, 0, 1 },
+    };
 }
 
-pub fn getProjectionMatrix(nearDist: f32, farDist: f32, fieldOfViewRad: f32, aspectRatio: f32) zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
+pub fn getProjectionMatrix(state: *AppState, cam: *Camera) zm.Mat {
+    const fieldOfViewRad = 1.0 / @tan(std.math.degreesToRadians(cam.fieldOfView * 0.5));
 
-    mat[0][0] = aspectRatio * fieldOfViewRad;
-    mat[1][1] = fieldOfViewRad;
-    mat[2][2] = farDist / (farDist - nearDist);
-    mat[3][2] = (-farDist * nearDist) / (farDist - nearDist);
-    mat[2][3] = 1.0;
-    mat[3][3] = 0.0;
-    return mat;
-}
-
-pub fn getProjectionMatrix2(state: *AppState, cam: *Camera) zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
-    const fieldOfViewRad = 1.0 / std.math.tan(std.math.degreesToRadians(cam.fieldOfView * 0.5));
-
-    mat[0][0] = state.getAspectRatio() * fieldOfViewRad;
-    mat[1][1] = fieldOfViewRad;
-    mat[2][2] = cam.farDist / (cam.farDist - cam.nearDist);
-    mat[3][2] = (-cam.farDist * cam.nearDist) / (cam.farDist - cam.nearDist);
-    mat[2][3] = 1.0;
-    mat[3][3] = 0.0;
-    return mat;
+    return zm.Mat{
+        .{ state.getAspectRatio() * fieldOfViewRad, 0, 0, 0 },
+        .{ 0, fieldOfViewRad, 0, 0 },
+        .{ 0, 0, cam.farDist / (cam.farDist - cam.nearDist), 1 },
+        .{ 0, 0, (-cam.farDist * cam.nearDist) / (cam.farDist - cam.nearDist), 0 },
+    };
 }
 
 pub fn getTranslationMatrix(x: f32, y: f32, z: f32) zm.Mat {
-    var mat: zm.Mat = .{.{0} ** 4} ** 4;
-
-    mat[0][0] = 1;
-    mat[1][1] = 1;
-    mat[2][2] = 1;
-    mat[3][3] = 1;
-    mat[3][0] = x;
-    mat[3][1] = y;
-    mat[3][2] = z;
-
-    return mat;
+    return zm.Mat{
+        .{ 1, 0, 0, 0 },
+        .{ 0, 1, 0, 0 },
+        .{ 0, 0, 1, 0 },
+        .{ x, y, z, 1 },
+    };
 }
 
 pub fn pointAt(pos: *const zm.Vec, target: *const zm.Vec, up: *const zm.Vec) zm.Mat {
@@ -397,8 +357,17 @@ pub fn main() !void {
     var state = try AppState.init(.{ .video = true }, ScreenWidth, ScreenHeight);
     defer state.deinit();
 
-    var meshCube = try Mesh.loadFromObjFile("./objs/axis.obj", allocator);
-    defer meshCube.deinit(allocator);
+    var meshes = [_]Mesh{
+        try Mesh.loadFromObjFile("./objs/axis.obj", allocator, .{ 0, 0, 15, 0 }),
+        try Mesh.loadFromObjFile("./objs/videoship.obj", allocator, .{ -10, 10, 25, 0 }),
+        try Mesh.loadFromObjFile("./objs/mountains.obj", allocator, .{ 0, -25, 0, 0 }),
+    };
+
+    defer {
+        for (&meshes) |*mesh| {
+            mesh.deinit(allocator);
+        }
+    }
 
     var cam = Camera{
         .pos = .{ 0, 0, 0, 1 },
@@ -414,7 +383,7 @@ pub fn main() !void {
 
     const upDir = zm.Vec{ 0, 1, 0, 0 };
 
-    const projectionMatrix = getProjectionMatrix2(&state, &cam);
+    const projectionMatrix = getProjectionMatrix(&state, &cam);
 
     var lastTick = sdl3.timer.getNanosecondsSinceInit();
     var curTick = sdl3.timer.getMillisecondsSinceInit();
@@ -428,15 +397,20 @@ pub fn main() !void {
 
     defer lights.deinit(allocator);
 
-    const ambientLight: f32 = 0.0;
+    const ambientLight: f32 = 0.5;
 
+    var trisOnScreen = try std.ArrayList(Tri).initCapacity(allocator, 10); // Input buffer
+    defer trisOnScreen.deinit(allocator);
+
+    var iterativeClipList = try std.ArrayList(Tri).initCapacity(allocator, 10); // Output buffer
+    defer iterativeClipList.deinit(allocator);
 
     var quit = false;
     var theta: f32 = 0;
     while (!quit) {
         lastTick = curTick;
         curTick = sdl3.timer.getMillisecondsSinceInit();
-        dt = @as(f32, @floatFromInt(curTick - lastTick)) / 500.0;
+        dt = @as(f32, @floatFromInt(curTick - lastTick)) / 1000.0;
 
         if (!state.paused) {
             theta += dt;
@@ -478,7 +452,6 @@ pub fn main() !void {
             }
         }
 
-
         if (state.keyState[@intFromEnum(sdl3.Scancode.w)]) {
             cam.pos[1] += speed;
         }
@@ -505,10 +478,10 @@ pub fn main() !void {
 
         const worldMat = zm.mul(
             zm.mul(
-                getZRotationMatrix(theta),
-                getXRotationMatrix(0.5 * theta),
-                // getZRotationMatrix(0),
-                // getXRotationMatrix(0),
+                // getZRotationMatrix(theta),
+                // getXRotationMatrix(0.5 * theta),
+                getZRotationMatrix(0),
+                getXRotationMatrix(0),
             ),
             getTranslationMatrix(0, 0, 0.5),
         );
@@ -516,9 +489,9 @@ pub fn main() !void {
         const radYaw = std.math.degreesToRadians(cam.yaw);
         const radPitch = std.math.degreesToRadians(cam.pitch);
         cam.dir = zm.normalize3(zm.Vec{
-            std.math.cos(radYaw) * std.math.cos(radPitch), // x
-            std.math.sin(radPitch), // y
-            std.math.sin(radYaw) * std.math.cos(radPitch), // z
+            @cos(radYaw) * @cos(radPitch), // x
+            @sin(radPitch), // y
+            @sin(radYaw) * @cos(radPitch), // z
             0,
         });
         var targetDir = cam.pos + cam.dir;
@@ -527,88 +500,52 @@ pub fn main() !void {
 
         trisToRaster.clearRetainingCapacity();
 
-        for (meshCube.tris.items) |tri| {
-            var triViewed = tri
-                .mul(&worldMat)
-                .translate(0, 0, 15)
-                .mul(&viewMat);
+        for (meshes) |mesh| {
+            for (mesh.tris.items) |tri| {
+                var triViewed = tri
+                    .mul(&worldMat)
+                    .translate(mesh.pos)
+                    .mul(&viewMat);
 
-            // Culling
-            const normal = triViewed.buildNormalAndGet();
+                // Culling
+                const normal = triViewed.buildNormalAndGet();
 
-            if (zm.dot3(normal, triViewed.p[0])[0] > 0) continue;
+                if (zm.dot3(normal, triViewed.p[0])[0] > 0) continue;
 
-            // Clipping
-            const clipped = clipTriangleAgainstPlane(.{ 0, 0, 1, 0 }, .{ 0, 0, 1, 0 }, triViewed);
-            for (0..clipped.count) |i| {
-                const clippedTri = clipped.tris[i];
+                // Clipping
+                const clipped = clipTriangleAgainstPlane(.{ 0, 0, 1, 0 }, .{ 0, 0, 1, 0 }, triViewed);
+                for (0..clipped.count) |i| {
+                    const clippedTri = clipped.tris[i];
 
-                // Project
-                var projectedTri = clippedTri
-                    // Project to screen
-                    .project(&projectionMatrix)
-                    // Fix XY plane
-                    .scale(-1, -1, 1)
-                    // Offset to center
-                    .translate(1, 1, 0)
-                    // Scale to screen size
-                    .scale(0.5 * @as(f32, @floatFromInt(state.width)), 0.5 * @as(f32, @floatFromInt(state.width)), 1);
+                    // Project
+                    var projectedTri = clippedTri
+                        // Project to screen
+                        .project(&projectionMatrix)
+                        // Fix XY plane
+                        .scale(.{ -1, -1, 1, 1 })
+                        // Offset to center
+                        .translate(.{ 1, 1, 0, 0 })
+                        // Scale to screen size
+                        .scale(.{ 0.5 * @as(f32, @floatFromInt(state.width)), 0.5 * @as(f32, @floatFromInt(state.width)), 1, 1 });
 
-                // Keep the original normal for lighting
-                projectedTri.normal = normal;
+                    // Keep the original normal for lighting
+                    projectedTri.normal = normal;
 
-                try trisToRaster.append(allocator, projectedTri);
+                    try trisToRaster.append(allocator, projectedTri);
+                }
             }
         }
 
         // Sorting back to front
         std.mem.sort(Tri, trisToRaster.items, {}, Tri.lessThan);
 
-        var trisOnScreen = try std.ArrayList(Tri).initCapacity(allocator, 10); // Input buffer
-        defer trisOnScreen.deinit(allocator);
-
-        var iterativeClipList = try std.ArrayList(Tri).initCapacity(allocator, 10); // Output buffer
-        defer iterativeClipList.deinit(allocator);
-
         for (trisToRaster.items) |tri| {
             var intensity = ambientLight;
 
             trisOnScreen.clearRetainingCapacity();
             try trisOnScreen.append(allocator, tri);
-            for (0..4) |p| {
-                iterativeClipList.clearRetainingCapacity();
-                while (trisOnScreen.items.len > 0) {
-                    const clipTris = switch (p) {
-                        0 => clipTriangleAgainstPlane(
-                            .{ 0, 0, 0, 1 },
-                            .{ 0, 1, 0, 1 },
-                            trisOnScreen.pop().?,
-                        ),
-                        1 => clipTriangleAgainstPlane(
-                            .{ 0, @as(f32, @floatFromInt(state.height)) - 1, 0, 1 },
-                            .{ 0, -1, 0, 1 },
-                            trisOnScreen.pop().?,
-                        ),
-                        2 => clipTriangleAgainstPlane(
-                            .{ 0, 0, 0, 1 },
-                            .{ 1, 0, 0, 1 },
-                            trisOnScreen.pop().?,
-                        ),
-                        3 => clipTriangleAgainstPlane(
-                            .{ @as(f32, @floatFromInt(state.width)) - 1, 0, 0, 1 },
-                            .{ -1, 0, 0, 1 },
-                            trisOnScreen.pop().?,
-                        ),
-                        else => unreachable,
-                    };
-                    for (0..clipTris.count) |i| {
-                        try iterativeClipList.append(allocator, clipTris.tris[i]);
-                    }
-                }
-                for (iterativeClipList.items) |t| {
-                    try trisOnScreen.append(allocator, t);
-                }
-            }
+
+            try clipTriToScreen(&state, allocator, &iterativeClipList, &trisOnScreen);
 
             for (trisOnScreen.items) |tri2| {
                 for (lights.items) |worldLight| {
@@ -699,4 +636,26 @@ pub fn clipTriangleAgainstPlane(planeP: zm.Vec, planeN: zm.Vec, inTri: Tri) stru
     }
 
     return .{ .count = 0, .tris = outTris };
+}
+
+pub fn clipTriToScreen(state: *const AppState, allocator: std.mem.Allocator, iterativeClipList: *std.ArrayList(Tri), trisOnScreen: *std.ArrayList(Tri)) !void {
+    const clippingPlanes = [_][2]zm.Vec{
+        .{ .{ 0, 0, 0, 1 }, .{ 0, 1, 0, 1 } },
+        .{ .{ 0, @as(f32, @floatFromInt(state.height)) - 1, 0, 1 }, .{ 0, -1, 0, 1 } },
+        .{ .{ 0, 0, 0, 1 }, .{ 1, 0, 0, 1 } },
+        .{ .{ @as(f32, @floatFromInt(state.width)) - 1, 0, 0, 1 }, .{ -1, 0, 0, 1 } },
+    };
+
+    for (clippingPlanes) |p| {
+        iterativeClipList.clearRetainingCapacity();
+        while (trisOnScreen.items.len > 0) {
+            const clipTris = clipTriangleAgainstPlane(p[0], p[1], trisOnScreen.pop().?);
+            for (0..clipTris.count) |i| {
+                try iterativeClipList.append(allocator, clipTris.tris[i]);
+            }
+        }
+        for (iterativeClipList.items) |t| {
+            try trisOnScreen.append(allocator, t);
+        }
+    }
 }
