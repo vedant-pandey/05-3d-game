@@ -11,6 +11,9 @@ const AppState = struct {
     width: usize,
     height: usize,
     initFlags: sdl3.InitFlags,
+    keyState: []const bool,
+    paused: bool,
+    quit: bool,
 
     const Self = @This();
 
@@ -33,6 +36,9 @@ const AppState = struct {
             .width = width,
             .height = height,
             .initFlags = initFlags,
+            .keyState = sdl3.keyboard.getState(),
+            .paused = false,
+            .quit = false,
         };
 
         return state;
@@ -422,7 +428,8 @@ pub fn main() !void {
 
     defer lights.deinit(allocator);
 
-    const ambientLight: f32 = 0.1;
+    const ambientLight: f32 = 0.0;
+
 
     var quit = false;
     var theta: f32 = 0;
@@ -431,7 +438,10 @@ pub fn main() !void {
         curTick = sdl3.timer.getMillisecondsSinceInit();
         dt = @as(f32, @floatFromInt(curTick - lastTick)) / 500.0;
 
-        theta += dt;
+        if (!state.paused) {
+            theta += dt;
+        }
+
         const speed = 8 * dt;
 
         while (sdl3.events.poll()) |event| {
@@ -443,23 +453,8 @@ pub fn main() !void {
                         .q => {
                             quit = true;
                         },
-                        .w => {
-                            cam.pos[1] += speed;
-                        },
-                        .s => {
-                            cam.pos[1] -= speed;
-                        },
-                        .a => {
-                            cam.moveRight(-speed);
-                        },
-                        .d => {
-                            cam.moveRight(speed);
-                        },
-                        .j => {
-                            cam.pos -= cam.dir * @as(zm.Vec, @splat(speed));
-                        },
-                        .k => {
-                            cam.pos += cam.dir * @as(zm.Vec, @splat(speed));
+                        .space => {
+                            state.paused = !state.paused;
                         },
                         else => {},
                     }
@@ -483,6 +478,26 @@ pub fn main() !void {
             }
         }
 
+
+        if (state.keyState[@intFromEnum(sdl3.Scancode.w)]) {
+            cam.pos[1] += speed;
+        }
+        if (state.keyState[@intFromEnum(sdl3.Scancode.s)]) {
+            cam.pos[1] -= speed;
+        }
+        if (state.keyState[@intFromEnum(sdl3.Scancode.a)]) {
+            cam.moveRight(-speed);
+        }
+        if (state.keyState[@intFromEnum(sdl3.Scancode.d)]) {
+            cam.moveRight(speed);
+        }
+        if (state.keyState[@intFromEnum(sdl3.Scancode.j)]) {
+            cam.pos -= cam.dir * @as(zm.Vec, @splat(speed));
+        }
+        if (state.keyState[@intFromEnum(sdl3.Scancode.k)]) {
+            cam.pos += cam.dir * @as(zm.Vec, @splat(speed));
+        }
+
         try state.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
         try state.renderer.clear();
 
@@ -490,10 +505,10 @@ pub fn main() !void {
 
         const worldMat = zm.mul(
             zm.mul(
-                // getZRotationMatrix(theta),
-                // getXRotationMatrix(0.5 * theta),
-                getZRotationMatrix(0),
-                getXRotationMatrix(0),
+                getZRotationMatrix(theta),
+                getXRotationMatrix(0.5 * theta),
+                // getZRotationMatrix(0),
+                // getXRotationMatrix(0),
             ),
             getTranslationMatrix(0, 0, 0.5),
         );
@@ -515,7 +530,7 @@ pub fn main() !void {
         for (meshCube.tris.items) |tri| {
             var triViewed = tri
                 .mul(&worldMat)
-                .translate(0, 0, 8)
+                .translate(0, 0, 15)
                 .mul(&viewMat);
 
             // Culling
