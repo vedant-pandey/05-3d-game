@@ -15,6 +15,7 @@ const AppState = struct {
     paused: bool,
     quit: bool,
     allocator: std.mem.Allocator,
+    relMouseMode: bool = true,
 
     const Self = @This();
 
@@ -52,6 +53,11 @@ const AppState = struct {
         self.window.deinit();
         sdl3.quit(self.initFlags);
         sdl3.shutdown();
+    }
+
+    pub fn resize(self: *Self, height: i32, width: i32) void {
+        self.height = @intCast(height);
+        self.width = @intCast(width);
     }
 
     pub inline fn getAspectRatio(self: *Self) f32 {
@@ -434,23 +440,27 @@ pub fn main() !void {
                         .space => {
                             state.paused = !state.paused;
                         },
+                        .escape => {
+                            state.relMouseMode = !state.relMouseMode;
+                            try sdl3.mouse.setWindowRelativeMode(state.window, state.relMouseMode);
+                        },
                         else => {},
                     }
                 },
                 .mouse_motion => {
-                    const x = event.mouse_motion.x_rel;
-                    const y = event.mouse_motion.y_rel;
-                    cam.yaw += x * cam.sensitivity;
-                    cam.pitch -= y * cam.sensitivity;
+                    if (state.relMouseMode) {
+                        const x = event.mouse_motion.x_rel;
+                        const y = event.mouse_motion.y_rel;
+                        cam.yaw += x * cam.sensitivity;
+                        cam.pitch -= y * cam.sensitivity;
 
-                    // Clamp pitch so you can't flip the camera upside down
-                    if (cam.pitch > 89.0) cam.pitch = 89.0;
-                    if (cam.pitch < -89.0) cam.pitch = -89.0;
+                        // Clamp pitch so you can't flip the camera upside down
+                        if (cam.pitch > 89.0) cam.pitch = 89.0;
+                        if (cam.pitch < -89.0) cam.pitch = -89.0;
+                    }
                 },
                 .window_resized => {
-                    state.height = @intCast(event.window_resized.height);
-                    state.width = @intCast(event.window_resized.width);
-                    std.debug.print("{} {} \n", .{ state.height, state.width });
+                    state.resize(event.window_resized.height, event.window_resized.width);
                 },
                 else => {},
             }
@@ -547,7 +557,7 @@ pub fn main() !void {
             trisOnScreen.clearRetainingCapacity();
             try trisOnScreen.append(state.allocator, tri);
 
-            try clipTriToScreen(&state,  &iterativeClipList, &trisOnScreen);
+            try clipTriToScreen(&state, &iterativeClipList, &trisOnScreen);
 
             for (trisOnScreen.items) |tri2| {
                 var intensity = ambientLight;
@@ -641,7 +651,7 @@ pub fn clipTriangleAgainstPlane(planeP: zm.Vec, planeN: zm.Vec, inTri: Tri) stru
     return .{ .count = 0, .tris = outTris };
 }
 
-pub fn clipTriToScreen(state: *const AppState,  iterativeClipList: *std.ArrayList(Tri), trisOnScreen: *std.ArrayList(Tri)) !void {
+pub fn clipTriToScreen(state: *const AppState, iterativeClipList: *std.ArrayList(Tri), trisOnScreen: *std.ArrayList(Tri)) !void {
     const clippingPlanes = [_][2]zm.Vec{
         .{ .{ 0, 0, 0, 1 }, .{ 0, 1, 0, 1 } },
         .{ .{ 0, @as(f32, @floatFromInt(state.height)) - 1, 0, 1 }, .{ 0, -1, 0, 1 } },
