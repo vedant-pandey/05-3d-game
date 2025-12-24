@@ -14,10 +14,11 @@ const AppState = struct {
     keyState: []const bool,
     paused: bool,
     quit: bool,
+    allocator: std.mem.Allocator,
 
     const Self = @This();
 
-    pub fn init(initFlags: sdl3.InitFlags, width: usize, height: usize) !Self {
+    pub fn init(allocator: std.mem.Allocator, initFlags: sdl3.InitFlags, width: usize, height: usize) !Self {
         try sdl3.init(initFlags);
         const window = try sdl3.video.Window.init("3D Renderer", width, height, .{
             .always_on_top = true,
@@ -40,14 +41,17 @@ const AppState = struct {
             .keyState = sdl3.keyboard.getState(),
             .paused = false,
             .quit = false,
+            .allocator = allocator,
         };
 
         return state;
     }
 
     pub fn deinit(self: *Self) void {
-        defer sdl3.shutdown();
-        defer sdl3.quit(self.initFlags);
+        self.renderer.deinit();
+        self.window.deinit();
+        sdl3.quit(self.initFlags);
+        sdl3.shutdown();
     }
 
     pub inline fn getAspectRatio(self: *Self) f32 {
@@ -354,18 +358,18 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var state = try AppState.init(.{ .video = true }, ScreenWidth, ScreenHeight);
+    var state = try AppState.init(allocator, .{ .video = true }, ScreenWidth, ScreenHeight);
     defer state.deinit();
 
     var meshes = [_]Mesh{
-        try Mesh.loadFromObjFile("./objs/axis.obj", allocator, .{ 0, 0, 15, 0 }),
-        try Mesh.loadFromObjFile("./objs/videoship.obj", allocator, .{ -10, 10, 25, 0 }),
-        try Mesh.loadFromObjFile("./objs/mountains.obj", allocator, .{ 0, -25, 0, 0 }),
+        try Mesh.loadFromObjFile("./objs/axis.obj", state.allocator, .{ 0, 0, 15, 0 }),
+        try Mesh.loadFromObjFile("./objs/videoship.obj", state.allocator, .{ -10, 10, 25, 0 }),
+        try Mesh.loadFromObjFile("./objs/mountains.obj", state.allocator, .{ 0, -25, 0, 0 }),
     };
 
     defer {
         for (&meshes) |*mesh| {
-            mesh.deinit(allocator);
+            mesh.deinit(state.allocator);
         }
     }
 
@@ -389,21 +393,21 @@ pub fn main() !void {
     var curTick = sdl3.timer.getMillisecondsSinceInit();
     var dt: f32 = 0;
 
-    var trisToRaster = try std.ArrayList(Tri).initCapacity(allocator, 1000);
-    defer trisToRaster.deinit(allocator);
+    var trisToRaster = try std.ArrayList(Tri).initCapacity(state.allocator, 1000);
+    defer trisToRaster.deinit(state.allocator);
 
-    var lights = try std.ArrayList(zm.Vec).initCapacity(allocator, 10);
-    try lights.append(allocator, zm.normalize3(zm.Vec{ 0, 0, -1, 0 }));
+    var lights = try std.ArrayList(zm.Vec).initCapacity(state.allocator, 10);
+    try lights.append(state.allocator, zm.normalize3(zm.Vec{ 0, 0, -1, 0 }));
 
-    defer lights.deinit(allocator);
+    defer lights.deinit(state.allocator);
 
     const ambientLight: f32 = 0.5;
 
-    var trisOnScreen = try std.ArrayList(Tri).initCapacity(allocator, 10); // Input buffer
-    defer trisOnScreen.deinit(allocator);
+    var trisOnScreen = try std.ArrayList(Tri).initCapacity(state.allocator, 10); // Input buffer
+    defer trisOnScreen.deinit(state.allocator);
 
-    var iterativeClipList = try std.ArrayList(Tri).initCapacity(allocator, 10); // Output buffer
-    defer iterativeClipList.deinit(allocator);
+    var iterativeClipList = try std.ArrayList(Tri).initCapacity(state.allocator, 10); // Output buffer
+    defer iterativeClipList.deinit(state.allocator);
 
     var quit = false;
     var theta: f32 = 0;
@@ -531,7 +535,7 @@ pub fn main() !void {
                     // Keep the original normal for lighting
                     projectedTri.normal = normal;
 
-                    try trisToRaster.append(allocator, projectedTri);
+                    try trisToRaster.append(state.allocator, projectedTri);
                 }
             }
         }
@@ -541,9 +545,9 @@ pub fn main() !void {
 
         for (trisToRaster.items) |tri| {
             trisOnScreen.clearRetainingCapacity();
-            try trisOnScreen.append(allocator, tri);
+            try trisOnScreen.append(state.allocator, tri);
 
-            try clipTriToScreen(&state, allocator, &iterativeClipList, &trisOnScreen);
+            try clipTriToScreen(&state,  &iterativeClipList, &trisOnScreen);
 
             for (trisOnScreen.items) |tri2| {
                 var intensity = ambientLight;
@@ -637,7 +641,7 @@ pub fn clipTriangleAgainstPlane(planeP: zm.Vec, planeN: zm.Vec, inTri: Tri) stru
     return .{ .count = 0, .tris = outTris };
 }
 
-pub fn clipTriToScreen(state: *const AppState, allocator: std.mem.Allocator, iterativeClipList: *std.ArrayList(Tri), trisOnScreen: *std.ArrayList(Tri)) !void {
+pub fn clipTriToScreen(state: *const AppState,  iterativeClipList: *std.ArrayList(Tri), trisOnScreen: *std.ArrayList(Tri)) !void {
     const clippingPlanes = [_][2]zm.Vec{
         .{ .{ 0, 0, 0, 1 }, .{ 0, 1, 0, 1 } },
         .{ .{ 0, @as(f32, @floatFromInt(state.height)) - 1, 0, 1 }, .{ 0, -1, 0, 1 } },
@@ -650,11 +654,11 @@ pub fn clipTriToScreen(state: *const AppState, allocator: std.mem.Allocator, ite
         while (trisOnScreen.items.len > 0) {
             const clipTris = clipTriangleAgainstPlane(p[0], p[1], trisOnScreen.pop().?);
             for (0..clipTris.count) |i| {
-                try iterativeClipList.append(allocator, clipTris.tris[i]);
+                try iterativeClipList.append(state.allocator, clipTris.tris[i]);
             }
         }
         for (iterativeClipList.items) |t| {
-            try trisOnScreen.append(allocator, t);
+            try trisOnScreen.append(state.allocator, t);
         }
     }
 }
