@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
 const vk = @import("vulkan.zig");
+const build_options = @import("build_options");
 
 const c = @cImport({
     @cInclude("volk.h");
@@ -8,7 +9,6 @@ const c = @cImport({
 
 pub const AppState = struct {
     window: sdl3.video.Window,
-    renderer: sdl3.render.Renderer,
     width: usize,
     height: usize,
     initFlags: sdl3.InitFlags,
@@ -18,7 +18,8 @@ pub const AppState = struct {
     allocator: std.mem.Allocator,
     relMouseMode: bool = true,
 
-    ctx: vk.VulkanCtx,
+    renderer: ?sdl3.render.Renderer,
+    ctx: ?vk.VulkanCtx,
 
     const Self = @This();
 
@@ -32,11 +33,8 @@ pub const AppState = struct {
             .vulkan = true,
         });
 
-        const renderer = try sdl3.render.Renderer.init(window, null);
-
         var state = AppState{
             .window = window,
-            .renderer = renderer,
             .width = width,
             .height = height,
             .initFlags = initFlags,
@@ -44,10 +42,9 @@ pub const AppState = struct {
             .paused = false,
             .quit = false,
             .allocator = allocator,
-            // .ctx = try vk.VulkanCtx.init(allocator, window, c.VK_API_VERSION_1_4),
-            .ctx = undefined,
+            .renderer = if (!build_options.enable_vulkan) try sdl3.render.Renderer.init(window, null) else null,
+            .ctx = if (build_options.enable_vulkan) try vk.VulkanCtx.init(allocator, window, c.VK_API_VERSION_1_4) else null,
         };
-
 
         state.window.raise() catch unreachable;
         try state.window.setPosition(.{ .absolute = 0 }, .{ .absolute = 0 });

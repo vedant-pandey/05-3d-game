@@ -13,6 +13,12 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    const enable_vulkan = b.option(bool, "enable_vulkan", "Use vulkan renderer instead of software rasterizer") orelse false;
+    const options = b.addOptions();
+    options.addOption(bool, "enable_vulkan", enable_vulkan);
+
+    exe.root_module.addOptions("build_options", options);
+
     exe.linkLibC();
     exe.linkLibCpp();
 

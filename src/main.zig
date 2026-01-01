@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
 const zm = @import("zmath");
+const build_options = @import("build_options");
 
 const root = @import("root.zig");
 const geometry = @import("geometry.zig");
@@ -135,10 +136,12 @@ pub fn main() !void {
             cam.pos += cam.dir * @as(zm.Vec, @splat(speed));
         }
 
-        try state.renderer.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
-        try state.renderer.clear();
+        if (!build_options.enable_vulkan) {
+            try state.renderer.?.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
+            try state.renderer.?.clear();
 
-        try state.renderer.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 });
+            try state.renderer.?.setDrawColor(.{ .r = 255, .g = 255, .b = 255, .a = 255 });
+        }
 
         const worldMat = zm.mul(
             zm.mul(
@@ -223,18 +226,22 @@ pub fn main() !void {
 
                 intensity = @min(intensity, 1.0);
 
-                try tri2.drawFill(&state.renderer, .{
-                    .r = 1 * intensity,
-                    .g = 1 * intensity,
-                    .b = 1 * intensity,
-                    .a = 1,
-                });
+                if (!build_options.enable_vulkan) {
+                    try tri2.drawFill(&state.renderer.?, .{
+                        .r = 1 * intensity,
+                        .g = 1 * intensity,
+                        .b = 1 * intensity,
+                        .a = 1,
+                    });
 
-                // Draw Wireframe
-                try tri2.drawWireframe(&state.renderer, .{ .r = 0, .g = 0, .b = 0, .a = 255 });
+                    // Draw Wireframe
+                    try tri2.drawWireframe(&state.renderer.?, .{ .r = 0, .g = 0, .b = 0, .a = 255 });
+                }
             }
         }
 
-        try state.renderer.present();
+        if (!build_options.enable_vulkan) {
+            try state.renderer.?.present();
+        }
     }
 }
