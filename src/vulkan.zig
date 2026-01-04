@@ -4,10 +4,8 @@ const builtin = @import("builtin");
 
 const c = @cImport({
     @cInclude("volk.h");
-    @cInclude("SDL3/SDL_vulkan.h");
     @cInclude("vk_mem_alloc.h");
 });
-
 
 const safeMode = builtin.mode == .Debug or builtin.mode == .ReleaseSafe;
 const isMacos = builtin.target.os.tag == .macos;
@@ -29,11 +27,11 @@ pub const VulkanCtx = struct {
             return error.SDL_Vulkan_LoadLibrary;
         };
 
-        const procAddrFnPtr = c.SDL_Vulkan_GetVkGetInstanceProcAddr() orelse {
+        const procAddrFnPtr = sdl3.vulkan.getVkGetInstanceProcAddr() catch {
             return error.SDL_Vulkan_GetVkGetInstanceProcAddr;
         };
 
-        c.volkInitializeCustom(@as(c.PFN_vkGetInstanceProcAddr, @ptrCast(procAddrFnPtr)));
+        c.volkInitializeCustom(@as(c.PFN_vkGetInstanceProcAddr, @ptrCast(@alignCast(procAddrFnPtr))));
 
         const requiredExtensions = try sdl3.vulkan.getInstanceExtensions();
 
@@ -108,55 +106,6 @@ pub const VulkanCtx = struct {
         if (c.vkEnumeratePhysicalDevices.?(ctx.instance, &physicalDeviceCount, &ctx.physicalDevice) != c.VK_SUCCESS) {
             return error.Vulkan_VkCreateInstance;
         }
-
-        // {
-        //     // BUG: Mac Metal does not support geometryShader,
-        //     // so any geomtry shader would need to be converted to compute shader, which may possibly require multi-pass
-        //
-        //     var vkPhysicalDeviceProperties: c.VkPhysicalDeviceProperties = undefined;
-        //     c.vkGetPhysicalDeviceProperties.?(ctx.physicalDevice, &vkPhysicalDeviceProperties);
-        //     std.debug.print("{any}\n", .{vkPhysicalDeviceProperties.deviceType});
-        //
-        //     var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeatures{
-        //         .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        //         .pNext = null,
-        //     };
-        //     var extendedDynamicState2Features = c.VkPhysicalDeviceExtendedDynamicState2FeaturesEXT{
-        //         .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
-        //         .pNext = &dynamicRenderingFeatures,
-        //     };
-        //
-        //     var vkPhysicalDeviceFeatures2 = c.VkPhysicalDeviceFeatures2{
-        //         .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        //         .pNext = &extendedDynamicState2Features,
-        //     };
-        //
-        //     // NOTE: vkGetPhysicalDeviceFeatures2
-        //     c.vkGetPhysicalDeviceFeatures2.?(ctx.physicalDevice, &vkPhysicalDeviceFeatures2);
-        //     std.debug.print("{any}\n", .{vkPhysicalDeviceFeatures2});
-        //     // .{
-        //     //     .sType = 1000059000,
-        //     //     .pNext = "anyopaque@16cebf4f0",
-        //     //     .features = .{ .robustBufferAccess = 1, .fullDrawIndexUint32 = 1, .imageCubeArray = 1, .independentBlend = 1, .geometryShader = 0, .tessellationShader = 1, .sampleRateShading = 1, .dualSrcBlend = 1, .logicOp = 0, .multiDrawIndirect = 1, .drawIndirectFirstInstance = 1, .depthClamp = 1, .depthBiasClamp = 1, .fillModeNonSolid = 1, .depthBounds = 0, .wideLines = 0, .largePoints = 1, .alphaToOne = 1, .multiViewport = 1, .samplerAnisotropy = 1, .textureCompressionETC2 = 1, .textureCompressionASTC_LDR = 1, .textureCompressionBC = 1, .occlusionQueryPrecise = 1, .pipelineStatisticsQuery = 0, .vertexPipelineStoresAndAtomics = 1, .fragmentStoresAndAtomics = 1, .shaderTessellationAndGeometryPointSize = 1, .shaderImageGatherExtended = 1, .shaderStorageImageExtendedFormats = 1, .shaderStorageImageMultisample = 0, .shaderStorageImageReadWithoutFormat = 1, .shaderStorageImageWriteWithoutFormat = 1, .shaderUniformBufferArrayDynamicIndexing = 1, .shaderSampledImageArrayDynamicIndexing = 1, .shaderStorageBufferArrayDynamicIndexing = 1, .shaderStorageImageArrayDynamicIndexing = 1, .shaderClipDistance = 1, .shaderCullDistance = 0, .shaderFloat64 = 0, .shaderInt64 = 1, .shaderInt16 = 1, .shaderResourceResidency = 0, .shaderResourceMinLod = 1, .sparseBinding = 0, .sparseResidencyBuffer = 0, .sparseResidencyImage2D = 0, .sparseResidencyImage3D = 0, .sparseResidency2Samples = 0, .sparseResidency4Samples = 0, .sparseResidency8Samples = 0, .sparseResidency16Samples = 0, .sparseResidencyAliased = 0, .variableMultisampleRate = 0, .inheritedQueries = 1, }, };
-        //     // };
-        //
-        //     std.debug.print("{any}\n", .{extendedDynamicState2Features});
-        //     // .{
-        //     //     .sType = 1000377000,
-        //     //     .pNext = "anyopaque@16b4a3490",
-        //     //     .extendedDynamicState2 = 1,
-        //     //     .extendedDynamicState2LogicOp = 0,
-        //     //     .extendedDynamicState2PatchControlPoints = 1,
-        //     // };
-        //
-        //     std.debug.print("{any}\n", .{dynamicRenderingFeatures});
-        //     // .{
-        //     //     .sType = 1000044003,
-        //     //     .pNext = null,
-        //     //     .dynamicRendering = 1,
-        //     // };
-        //
-        // }
 
         // {
         //     // NOTE: Check queue flag properties
@@ -381,3 +330,56 @@ pub const VulkanCtx = struct {
         @panic("Not implemented");
     }
 };
+
+fn isDeviceSuitable(physicalDevice: c.VkPhysicalDevice) bool {
+    {
+        // BUG: Mac Metal does not support geometryShader,
+        // so any geomtry shader would need to be converted to compute shader, which may possibly require multi-pass
+
+        var vkPhysicalDeviceProperties: c.VkPhysicalDeviceProperties = undefined;
+        c.vkGetPhysicalDeviceProperties.?(physicalDevice, &vkPhysicalDeviceProperties);
+        std.debug.print("{any}\n", .{vkPhysicalDeviceProperties.deviceType});
+
+        var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeatures{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+            .pNext = null,
+        };
+        var extendedDynamicState2Features = c.VkPhysicalDeviceExtendedDynamicState2FeaturesEXT{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
+            .pNext = &dynamicRenderingFeatures,
+        };
+
+        var vkPhysicalDeviceFeatures2 = c.VkPhysicalDeviceFeatures2{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &extendedDynamicState2Features,
+        };
+
+        // NOTE: vkGetPhysicalDeviceFeatures2
+        c.vkGetPhysicalDeviceFeatures2.?(physicalDevice, &vkPhysicalDeviceFeatures2);
+        std.debug.print("{any}\n", .{vkPhysicalDeviceFeatures2});
+        // .{
+        //     .sType = 1000059000,
+        //     .pNext = "anyopaque@16cebf4f0",
+        //     .features = .{ .robustBufferAccess = 1, .fullDrawIndexUint32 = 1, .imageCubeArray = 1, .independentBlend = 1, .geometryShader = 0, .tessellationShader = 1, .sampleRateShading = 1, .dualSrcBlend = 1, .logicOp = 0, .multiDrawIndirect = 1, .drawIndirectFirstInstance = 1, .depthClamp = 1, .depthBiasClamp = 1, .fillModeNonSolid = 1, .depthBounds = 0, .wideLines = 0, .largePoints = 1, .alphaToOne = 1, .multiViewport = 1, .samplerAnisotropy = 1, .textureCompressionETC2 = 1, .textureCompressionASTC_LDR = 1, .textureCompressionBC = 1, .occlusionQueryPrecise = 1, .pipelineStatisticsQuery = 0, .vertexPipelineStoresAndAtomics = 1, .fragmentStoresAndAtomics = 1, .shaderTessellationAndGeometryPointSize = 1, .shaderImageGatherExtended = 1, .shaderStorageImageExtendedFormats = 1, .shaderStorageImageMultisample = 0, .shaderStorageImageReadWithoutFormat = 1, .shaderStorageImageWriteWithoutFormat = 1, .shaderUniformBufferArrayDynamicIndexing = 1, .shaderSampledImageArrayDynamicIndexing = 1, .shaderStorageBufferArrayDynamicIndexing = 1, .shaderStorageImageArrayDynamicIndexing = 1, .shaderClipDistance = 1, .shaderCullDistance = 0, .shaderFloat64 = 0, .shaderInt64 = 1, .shaderInt16 = 1, .shaderResourceResidency = 0, .shaderResourceMinLod = 1, .sparseBinding = 0, .sparseResidencyBuffer = 0, .sparseResidencyImage2D = 0, .sparseResidencyImage3D = 0, .sparseResidency2Samples = 0, .sparseResidency4Samples = 0, .sparseResidency8Samples = 0, .sparseResidency16Samples = 0, .sparseResidencyAliased = 0, .variableMultisampleRate = 0, .inheritedQueries = 1, }, };
+        // };
+
+        std.debug.print("{any}\n", .{extendedDynamicState2Features});
+        // .{
+        //     .sType = 1000377000,
+        //     .pNext = "anyopaque@16b4a3490",
+        //     .extendedDynamicState2 = 1,
+        //     .extendedDynamicState2LogicOp = 0,
+        //     .extendedDynamicState2PatchControlPoints = 1,
+        // };
+
+        std.debug.print("{any}\n", .{dynamicRenderingFeatures});
+        // .{
+        //     .sType = 1000044003,
+        //     .pNext = null,
+        //     .dynamicRendering = 1,
+        // };
+
+    }
+
+    return true;
+}
