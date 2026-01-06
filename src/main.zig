@@ -20,7 +20,7 @@ pub fn main() !void {
 
     var meshes = [_]geometry.Mesh{
         try geometry.Mesh.loadFromObjFile("./objs/axis.obj", state.allocator, .{ 0, 0, 15, 0 }),
-        try geometry.Mesh.loadFromObjFile("./objs/videoship.obj", state.allocator, .{ -10, 10, 25, 0 }),
+        try geometry.Mesh.loadFromObjFile("./objs/VideoShip.obj", state.allocator, .{ -10, 10, 25, 0 }),
         try geometry.Mesh.loadFromObjFile("./objs/mountains.obj", state.allocator, .{ 0, -25, 0, 0 }),
     };
 
