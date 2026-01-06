@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -35,7 +36,22 @@ pub fn build(b: *std.Build) void {
         .flags = &[_][]const u8{"-std=c++17"},
     });
 
-    exe.linkSystemLibrary("vulkan");
+    if (builtin.target.os.tag == .windows) {
+        if (std.process.getEnvVarOwned(b.allocator, "VULKAN_SDK")) |sdk_path| {
+            defer b.allocator.free(sdk_path);
+
+            const sdk_include = b.pathJoin(&.{ sdk_path, "Include" });
+            const sdk_lib = b.pathJoin(&.{ sdk_path, "Lib" });
+
+            exe.addIncludePath(.{ .cwd_relative = sdk_include });
+            exe.addLibraryPath(.{ .cwd_relative = sdk_lib });
+            exe.linkSystemLibrary("vulkan-1");
+        } else |_| {
+            exe.linkSystemLibrary("vulkan-1");
+        }
+    } else {
+        exe.linkSystemLibrary("vulkan");
+    }
 
     const sdl3 = b.dependency("sdl3", .{
         .target = target,

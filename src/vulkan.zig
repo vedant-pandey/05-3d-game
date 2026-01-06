@@ -17,7 +17,6 @@ pub const VulkanCtx = struct {
     graphicsQueue: c.VkQueue,
     presentQueue: c.VkQueue,
     allocator: c.VmaAllocator,
-    // surface: c.VkSurfaceKHR,
     surface: sdl3.vulkan.Surface,
 
     const Self = @This();
@@ -31,7 +30,7 @@ pub const VulkanCtx = struct {
             return error.SDL_Vulkan_GetVkGetInstanceProcAddr;
         };
 
-        c.volkInitializeCustom(@as(c.PFN_vkGetInstanceProcAddr, @ptrCast(@alignCast(procAddrFnPtr))));
+        c.volkInitializeCustom(@as(c.PFN_vkGetInstanceProcAddr, @alignCast(@ptrCast(procAddrFnPtr))));
 
         const requiredExtensions = try sdl3.vulkan.getInstanceExtensions();
 
@@ -104,7 +103,7 @@ pub const VulkanCtx = struct {
         // NOTE:: vkEnumeratePhysicalDevices can also return VK_INCOMPLETE as success but I'll ignore it for now
         // since I'm only querying a single device
         if (c.vkEnumeratePhysicalDevices.?(ctx.instance, &physicalDeviceCount, &ctx.physicalDevice) != c.VK_SUCCESS) {
-            return error.Vulkan_VkCreateInstance;
+            return error.Vulkan_VkEnumeratePhysicalDevices;
         }
 
         // {
