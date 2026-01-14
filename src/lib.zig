@@ -1,6 +1,6 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
-const vk = @import("vulkan.zig");
+const vk = @import("vulkan/context.zig");
 const build_options = @import("build_options");
 
 const c = @cImport({
@@ -54,9 +54,14 @@ pub const AppState = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        // self.renderer.deinit();
+        if (self.renderer != null) {
+            self.renderer.?.deinit();
+        }
 
-        // try self.ctx.deinit();
+        if (self.ctx != null) {
+            self.ctx.?.deinit();
+        }
+
         self.window.deinit();
         sdl3.quit(self.initFlags);
         sdl3.shutdown();
@@ -67,7 +72,7 @@ pub const AppState = struct {
         self.width = @intCast(width);
     }
 
-    pub inline fn getAspectRatio(self: *Self) f32 {
+    pub inline fn getAspectRatio(self: *const Self) f32 {
         return @as(f32, @floatFromInt(self.height)) / @as(f32, @floatFromInt(self.width));
     }
 };
