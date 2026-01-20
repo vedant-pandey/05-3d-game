@@ -18,10 +18,17 @@ pub fn main() !void {
     var state = try lib.AppState.init(allocator, .{ .video = true }, ScreenWidth, ScreenHeight);
     defer state.deinit();
 
-    if (!build_options.enable_vulkan) {
+    if (!build_options.use_vulkan) {
         try softwareRasterizer(&state);
         return;
     }
+
+    try createImageViews(&state);
+}
+
+// TIDY: Move this to vulkan related namespace
+fn createImageViews(state: *lib.AppState) !void {
+    _ = state;
 }
 
 fn softwareRasterizer(state: *lib.AppState) !void {
@@ -143,7 +150,7 @@ fn softwareRasterizer(state: *lib.AppState) !void {
             cam.pos += cam.dir * @as(zm.Vec, @splat(speed));
         }
 
-        if (!build_options.enable_vulkan) {
+        if (!build_options.use_vulkan) {
             try state.renderer.?.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
             try state.renderer.?.clear();
 
@@ -233,7 +240,7 @@ fn softwareRasterizer(state: *lib.AppState) !void {
 
                 intensity = @min(intensity, 1.0);
 
-                if (!build_options.enable_vulkan) {
+                if (!build_options.use_vulkan) {
                     try tri2.drawFill(&state.renderer.?, .{
                         .r = 1 * intensity,
                         .g = 1 * intensity,
@@ -247,7 +254,7 @@ fn softwareRasterizer(state: *lib.AppState) !void {
             }
         }
 
-        if (!build_options.enable_vulkan) {
+        if (!build_options.use_vulkan) {
             try state.renderer.?.present();
         }
     }

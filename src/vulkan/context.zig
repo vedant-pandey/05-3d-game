@@ -1,14 +1,14 @@
 const std = @import("std");
 const sdl3 = @import("sdl3");
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 
 const c = @cImport({
     @cInclude("volk.h");
     @cInclude("vk_mem_alloc.h");
 });
 
-// TODO: Create a compiler flag for ease
-const safeMode = builtin.mode == .Debug or builtin.mode == .ReleaseSafe;
+const safeMode = build_options.vulkan_validation;
 const isMacos = builtin.target.os.tag == .macos;
 
 // FIXME: Remove all print statements

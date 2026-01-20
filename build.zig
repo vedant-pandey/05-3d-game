@@ -14,9 +14,11 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    const enable_vulkan = b.option(bool, "enable_vulkan", "Use vulkan renderer instead of software rasterizer") orelse false;
+    const use_vulkan = b.option(bool, "use_vulkan", "Use vulkan renderer") orelse false;
+    const vulkan_validation = b.option(bool, "vulkan_validation", "Enable vulkan validation layer") orelse false;
     const options = b.addOptions();
-    options.addOption(bool, "enable_vulkan", enable_vulkan);
+    options.addOption(bool, "use_vulkan", use_vulkan);
+    options.addOption(bool, "vulkan_validation", vulkan_validation);
 
     exe.root_module.addOptions("build_options", options);
 

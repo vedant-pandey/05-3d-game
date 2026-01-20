@@ -42,8 +42,8 @@ pub const AppState = struct {
             .paused = false,
             .quit = false,
             .allocator = allocator,
-            .renderer = if (!build_options.enable_vulkan) try sdl3.render.Renderer.init(window, null) else null,
-            .ctx = if (build_options.enable_vulkan) try vk.VulkanCtx.init(allocator, window, c.VK_API_VERSION_1_4) else null,
+            .renderer = if (!build_options.use_vulkan) try sdl3.render.Renderer.init(window, null) else null,
+            .ctx = if (build_options.use_vulkan) try vk.VulkanCtx.init(allocator, window, c.VK_API_VERSION_1_4) else null,
         };
 
         state.window.raise() catch unreachable;
