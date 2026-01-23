@@ -23,11 +23,15 @@ pub fn main() !void {
         return;
     }
 
-    try createImageViews(&state);
+    vulkanRasterizer(&state);
+}
+
+fn vulkanRasterizer(state: *lib.AppState) void {
+    createImageViews(state);
 }
 
 // TIDY: Move this to vulkan related namespace
-fn createImageViews(state: *lib.AppState) !void {
+fn createImageViews(state: *lib.AppState) void {
     _ = state;
 }
 
