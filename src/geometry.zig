@@ -2,7 +2,7 @@ const sdl3 = @import("sdl3");
 const std = @import("std");
 const zm = @import("zmath");
 
-const root = @import("root.zig");
+const lib = @import("lib.zig");
 const camera = @import("camera.zig");
 
 pub fn projectPoint(vec: zm.Vec, mat: zm.Mat) zm.Vec {
@@ -222,7 +222,7 @@ pub fn getIdentityMatrix() zm.Mat {
     };
 }
 
-pub fn getProjectionMatrix(state: *root.AppState, cam: *camera.Camera) zm.Mat {
+pub fn getProjectionMatrix(state: *const lib.AppState, cam: *camera.Camera) zm.Mat {
     const fieldOfViewRad = 1.0 / @tan(std.math.degreesToRadians(cam.fieldOfView * 0.5));
 
     return zm.Mat{

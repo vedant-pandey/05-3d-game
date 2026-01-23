@@ -1,7 +1,7 @@
 const std = @import("std");
 const zm = @import("zmath");
 const geometry = @import("geometry.zig");
-const root = @import("root.zig");
+const lib = @import("lib.zig");
 
 pub const Camera = struct {
     pos: zm.Vec,
@@ -84,7 +84,7 @@ pub fn clipTriangleAgainstPlane(planeP: zm.Vec, planeN: zm.Vec, inTri: geometry.
     return .{ .count = 0, .tris = outTris };
 }
 
-pub fn clipTriToScreen(state: *const root.AppState, iterativeClipList: *std.ArrayList(geometry.Tri), trisOnScreen: *std.ArrayList(geometry.Tri)) !void {
+pub fn clipTriToScreen(state: *const lib.AppState, iterativeClipList: *std.ArrayList(geometry.Tri), trisOnScreen: *std.ArrayList(geometry.Tri)) !void {
     const clippingPlanes = [_][2]zm.Vec{
         .{ .{ 0, 0, 0, 1 }, .{ 0, 1, 0, 1 } },
         .{ .{ 0, @as(f32, @floatFromInt(state.height)) - 1, 0, 1 }, .{ 0, -1, 0, 1 } },

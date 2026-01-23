@@ -3,7 +3,7 @@ const sdl3 = @import("sdl3");
 const zm = @import("zmath");
 const build_options = @import("build_options");
 
-const root = @import("root.zig");
+const lib = @import("lib.zig");
 const geometry = @import("geometry.zig");
 const camera = @import("camera.zig");
 
@@ -15,9 +15,27 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var state = try root.AppState.init(allocator, .{ .video = true }, ScreenWidth, ScreenHeight);
+    var state = try lib.AppState.init(allocator, .{ .video = true }, ScreenWidth, ScreenHeight);
     defer state.deinit();
 
+    if (!build_options.use_vulkan) {
+        try softwareRasterizer(&state);
+        return;
+    }
+
+    vulkanRasterizer(&state);
+}
+
+fn vulkanRasterizer(state: *lib.AppState) void {
+    createImageViews(state);
+}
+
+// TIDY: Move this to vulkan related namespace
+fn createImageViews(state: *lib.AppState) void {
+    _ = state;
+}
+
+fn softwareRasterizer(state: *lib.AppState) !void {
     var meshes = [_]geometry.Mesh{
         try geometry.Mesh.loadFromObjFile("./objs/axis.obj", state.allocator, .{ 0, 0, 15, 0 }),
         try geometry.Mesh.loadFromObjFile("./objs/VideoShip.obj", state.allocator, .{ -10, 10, 25, 0 }),
@@ -44,7 +62,7 @@ pub fn main() !void {
 
     const upDir = zm.Vec{ 0, 1, 0, 0 };
 
-    const projectionMatrix = geometry.getProjectionMatrix(&state, &cam);
+    const projectionMatrix = geometry.getProjectionMatrix(state, &cam);
 
     var lastTick = sdl3.timer.getNanosecondsSinceInit();
     var curTick = sdl3.timer.getMillisecondsSinceInit();
@@ -136,7 +154,7 @@ pub fn main() !void {
             cam.pos += cam.dir * @as(zm.Vec, @splat(speed));
         }
 
-        if (!build_options.enable_vulkan) {
+        if (!build_options.use_vulkan) {
             try state.renderer.?.setDrawColor(.{ .r = 0, .g = 0, .b = 0, .a = 255 });
             try state.renderer.?.clear();
 
@@ -210,7 +228,7 @@ pub fn main() !void {
             trisOnScreen.clearRetainingCapacity();
             try trisOnScreen.append(state.allocator, tri);
 
-            try camera.clipTriToScreen(&state, &iterativeClipList, &trisOnScreen);
+            try camera.clipTriToScreen(state, &iterativeClipList, &trisOnScreen);
 
             for (trisOnScreen.items) |tri2| {
                 var intensity = ambientLight;
@@ -226,7 +244,7 @@ pub fn main() !void {
 
                 intensity = @min(intensity, 1.0);
 
-                if (!build_options.enable_vulkan) {
+                if (!build_options.use_vulkan) {
                     try tri2.drawFill(&state.renderer.?, .{
                         .r = 1 * intensity,
                         .g = 1 * intensity,
@@ -240,7 +258,7 @@ pub fn main() !void {
             }
         }
 
-        if (!build_options.enable_vulkan) {
+        if (!build_options.use_vulkan) {
             try state.renderer.?.present();
         }
     }
